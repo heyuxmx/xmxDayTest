@@ -18,15 +18,10 @@
 #include <time.h>
 #include <unistd.h>
 
-/*** defines ***/
-
-#define KILO_VERSION "0.0.1"
-#define KILO_TAB_STOP 8
-#define KILO_QUIT_TIMES 3
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
-enum editorKey {
+enum ediKey {
   BACKSPACE = 127,
   ARROW_LEFT = 1000,
   ARROW_RIGHT,
@@ -38,8 +33,6 @@ enum editorKey {
   PAGE_UP,
   PAGE_DOWN
 };
-
-/*** data ***/
 
 typedef struct erow {
   int size;
@@ -66,13 +59,11 @@ struct editorConfig {
 
 struct editorConfig E;
 
-/*** prototypes ***/
-
 void editorSetStatusMessage(const char *fmt, ...);
 void editorRefreshScreen();
 char *editorPrompt(char *prompt);
 
-/*** terminal ***/
+//终端控制模块
 
 void die(const char *s) {
   write(STDOUT_FILENO, "\x1b[2J", 4);
@@ -153,6 +144,7 @@ int editorReadKey() {
 }
 
 int getCursorPosition(int *rows, int *cols) {
+  //发送转义序列并解析响应
   char buf[32];
   unsigned int i = 0;
 
@@ -184,14 +176,14 @@ int getWindowSize(int *rows, int *cols) {
   }
 }
 
-/*** row operations ***/
+//行操作模块
 
 int editorRowCxToRx(erow *row, int cx) {
   int rx = 0;
   int j;
   for (j = 0; j < cx; j++) {
     if (row->chars[j] == '\t')
-      rx += (KILO_TAB_STOP - 1) - (rx % KILO_TAB_STOP);
+      rx += (8 - 1) - (rx % 8);
     rx++;
   }
   return rx;
@@ -204,13 +196,13 @@ void editorUpdateRow(erow *row) {
     if (row->chars[j] == '\t') tabs++;
 
   free(row->render);
-  row->render = (char*)malloc(row->size + tabs*(KILO_TAB_STOP - 1) + 1);
+  row->render = (char*)malloc(row->size + tabs*(8 - 1) + 1);
 
   int idx = 0;
   for (j = 0; j < row->size; j++) {
     if (row->chars[j] == '\t') {
       row->render[idx++] = ' ';
-      while (idx % KILO_TAB_STOP != 0) row->render[idx++] = ' ';
+      while (idx % 8 != 0) row->render[idx++] = ' ';
     } else {
       row->render[idx++] = row->chars[j];
     }
@@ -278,7 +270,7 @@ void editorRowDelChar(erow *row, int at) {
   E.dirty++;
 }
 
-/*** editor operations ***/
+//编辑操作模块（光标）
 
 void editorInsertChar(int c) {
   if (E.cy == E.numrows) {
@@ -319,7 +311,7 @@ void editorDelChar() {
   }
 }
 
-/*** file i/o ***/
+//文件IO模块
 
 char *editorRowsToString(int *buflen) {
   int totlen = 0;
@@ -351,8 +343,7 @@ void editorOpen(char *filename) {
   size_t linecap = 0;
   ssize_t linelen;
   while ((linelen = getline(&line, &linecap, fp)) != -1) {
-    while (linelen > 0 && (line[linelen - 1] == '\n' ||
-                           line[linelen - 1] == '\r'))
+    while (linelen > 0 && (line[linelen - 1] == '\n' ||line[linelen - 1] == '\r'))
       linelen--;
     editorInsertRow(E.numrows, line, linelen);
   }
@@ -391,7 +382,7 @@ void editorSave() {
   editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
 }
 
-/*** append buffer ***/
+//缓冲区模块
 
 struct abuf {
   char *b;
@@ -413,7 +404,7 @@ void abFree(struct abuf *ab) {
   free(ab->b);
 }
 
-/*** output ***/
+//输出处理模块
 
 void editorScroll() {
   E.rx = 0;
@@ -443,7 +434,7 @@ void editorDrawRows(struct abuf *ab) {
       if (E.numrows == 0 && y == E.screenrows / 3) {
         char welcome[80];
         int welcomelen = snprintf(welcome, sizeof(welcome),
-          "Kilo editor -- version %s", KILO_VERSION);
+          "Kilo editor -- version %s", "0.0.1");
         if (welcomelen > E.screencols) welcomelen = E.screencols;
         int padding = (E.screencols - welcomelen) / 2;
         if (padding) {
@@ -529,9 +520,10 @@ void editorSetStatusMessage(const char *fmt, ...) {
   E.statusmsg_time = time(NULL);
 }
 
-/*** input ***/
+//输入处理模块
 
 char *editorPrompt(char *prompt) {
+  //输出提示，并接受一个字符
   size_t bufsize = 128;
   char *buf = (char*)malloc(bufsize);
 
@@ -605,7 +597,7 @@ void editorMoveCursor(int key) {
 }
 
 void editorProcessKeypress() {
-  static int quit_times = KILO_QUIT_TIMES;
+  static int quit_times = 3;
 
   int c = editorReadKey();
 
@@ -678,10 +670,10 @@ void editorProcessKeypress() {
       break;
   }
 
-  quit_times = KILO_QUIT_TIMES;
+  quit_times = 3;
 }
 
-/*** init ***/
+//初始化模块
 
 void initEditor() {
   E.cx = 0;
